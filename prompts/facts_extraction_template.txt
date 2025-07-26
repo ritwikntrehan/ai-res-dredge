@@ -1,9 +1,0 @@
-Extract from the following resume text these fields and return _only_ valid JSON:
-
-- certification: a single string (or empty if none)
-- coursework: list of course names (or empty list)
-- skills: list of skills
-- tools: list of software/tools
-
-Resume Text:
-{{ resume_text }}
