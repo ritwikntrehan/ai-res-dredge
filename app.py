@@ -1,72 +1,71 @@
-import json
-import streamlit as st
-from utils import parse_resume_file, extract_facts
-from chains.resume_rewrite_chain import get_resume_rewrite_chain
+import os, io, streamlit as st
+from utils import extract_text, write_resume_md
+from chains.dredge_chain import dredge
+from chains.gen_chain import generate_resume
 
-st.set_page_config(page_title="AI RAG Resume Rewriter", layout="wide")
+st.set_page_config(page_title="Auto‑re‑drafter v0.1")
+st.title("Auto‑re‑drafter (v0.1)")
 
-def main():
-    st.title("AI‑Powered Resume Rewrite")
+# --- INPUTS --------------------------------------------------------------
+job = st.text_area("Paste Job Posting", height=200)
 
-    # 1️⃣ Upload & parse resume
-    uploaded = st.file_uploader("Upload your resume (PDF or DOCX)", type=["pdf", "docx"])
-    if not uploaded:
-        st.info("Please upload a resume to start.")
-        return
-    resume_text = parse_resume_file(uploaded)
+cand_files = st.file_uploader(
+    "Candidate docs (resume, certs, transcript, analyst notes …)",
+    type=["pdf", "docx", "txt"],
+    accept_multiple_files=True,
+)
 
-    # 2️⃣ Paste job description
-    job_desc = st.text_area("Paste Target Job Description", height=200)
-    if not job_desc:
-        st.info("Enter the job description to tailor your resume.")
-        return
+# --- GENERATE ------------------------------------------------------------
+if st.button("Generate resume"):
+    if not job or not cand_files:
+        st.error("Please provide the job posting **and** at least one candidate file.")
+    else:
+        # 1) concat all uploaded docs
+        with st.spinner("Extracting text …"):
+            cand_txt = "\n\n".join(extract_text(f) for f in cand_files)
 
-    # 3️⃣ Extract facts
-    facts_json = extract_facts(resume_text)
+        # 2) dredge → facts JSON
+        with st.spinner("Dredging facts …"):
+            facts = dredge(cand_txt, job)
 
-    # 4️⃣ LLM parameters
-    col1, col2 = st.columns(2)
-    with col1:
-        temp = st.slider("Generation Temperature", 0.0, 1.0, 0.7, 0.05)
-    with col2:
-        max_toks = st.number_input("Max Output Tokens", min_value=100, max_value=2000, value=800)
+        # 3) generate résumé + citations
+        with st.spinner("Drafting resume …"):
+            output = generate_resume(facts, job)
 
-    # 5️⃣ Run rewrite
-    if st.button("Rewrite Resume"):
-        chain = get_resume_rewrite_chain(temperature=temp, max_tokens=max_toks)
-        with st.spinner("Rewriting…"):
-            result_obj = chain.invoke({
-                "resume": resume_text,
-                "job_description": job_desc,
-                "facts_json": facts_json
-            })
+        # 4) split safely
+        resume_md, citations = (output.split("# CITATIONS", 1) + [""])[:2]
+        resume_md = resume_md.strip()
+        citations  = citations.strip() or "LLM did not return a citation section."
 
-        rewritten = result_obj.generations[0][0].text
-        usage = result_obj.llm_output["token_usage"]
+        # 5) write résumé file
+        resume_path = "resume.docx"
+        write_resume_md(resume_md, resume_path)
 
-        # 6️⃣ Display
-        st.subheader("Rewritten Resume")
-        st.text_area("", value=rewritten, height=300)
+        # 6) save citations to bytes (txt for now; swap in real PDF later)
+        citations_bytes = citations.encode("utf‑8")
 
-        # 7️⃣ Downloads
+        # 7) stash in session_state so buttons persist across rerun
+        st.session_state["resume_path"] = resume_path
+        st.session_state["citations_bytes"] = citations_bytes
+
+        st.success("Files ready ↓")
+
+# --- DOWNLOAD BUTTONS ----------------------------------------------------
+if "resume_path" in st.session_state:
+    with open(st.session_state["resume_path"], "rb") as f:
         st.download_button(
-            "Download Prompt Tokens",
-            data=json.dumps({"prompt_tokens": usage["prompt_tokens"]}, indent=2),
-            file_name="input_tokens.json",
-            mime="application/json",
-        )
-        st.download_button(
-            "Download Total Tokens",
-            data=json.dumps({"total_tokens": usage["total_tokens"]}, indent=2),
-            file_name="total_tokens.json",
-            mime="application/json",
-        )
-        st.download_button(
-            "Download Output Tokens",
-            data=json.dumps({"completion_tokens": usage["completion_tokens"]}, indent=2),
-            file_name="output_tokens.json",
-            mime="application/json",
+            "Download resume (.docx)",
+            f,
+            file_name="resume.docx",
+            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            key="resume_dl",
         )
 
-if __name__ == "__main__":
-    main()
+if "citations_bytes" in st.session_state:
+    st.download_button(
+        "Download citations (.txt)",
+        st.session_state["citations_bytes"],
+        file_name="citations.txt",
+        mime="text/plain",
+        key="cites_dl",
+    )
