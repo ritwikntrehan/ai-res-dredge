@@ -1,5 +1,6 @@
 streamlit
 langchain
+langchain‑community
 openai
 python-docx
 PyPDF2
