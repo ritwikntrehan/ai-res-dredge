@@ -3,9 +3,11 @@ import json
 import io
 import sys, os
 from zipfile import ZipFile
-from chains.rag_chain import ResumeRAGChain
 
-sys.path.append(os.path.abspath("src"))
+# Ensure the parent directory of this script (project root) is on the Python path
+sys.path.append(os.path.abspath(os.path.dirname(__file__)))
+
+from chains.rag_chain import ResumeRAGChain
 
 # Initialize RAG chain
 chain = ResumeRAGChain()
@@ -38,16 +40,13 @@ if st.button("Rewrite"):
         st.json(result.get('facts_json', {}))
 
         st.subheader("All Output Tokens (debug)")
-        # Display tokens list or string
         tokens = result.get('output_tokens', [])
         st.write(tokens)
 
-        # Prepare combined download (resume + metadata)
+        # Package resume + metadata into ZIP
         zip_buffer = io.BytesIO()
         with ZipFile(zip_buffer, "w") as zip_file:
-            # Add generated resume docx
             zip_file.writestr("redrafted_resume.docx", result['resume_docx'].getvalue())
-            # Add metadata JSON
             metadata = {
                 'facts': result.get('facts_json'),
                 'tokens': result.get('output_tokens')
