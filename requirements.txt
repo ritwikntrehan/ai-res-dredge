@@ -5,4 +5,3 @@ openai
 python-docx
 PyPDF2
 docx2txt
-jinja2
