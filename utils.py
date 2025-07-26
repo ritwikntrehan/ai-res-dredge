@@ -1,39 +1,33 @@
 import docx2txt
-from io import BytesIO
+import PyPDF2
+import openai
+import os
+from chains.facts_extraction_chain import extract_facts
 
-def load_resume_text(resume_file):
-    """
-    Load and return the full text of the user’s resume.
-    - If they uploaded a .docx (Streamlit UploadedFile), run it through docx2txt.
-    - Otherwise, treat it as plain text.
-    """
-    if not resume_file:
-        return ""
-    # read raw bytes from the uploader
-    raw = resume_file.read()
-    # try .docx first
-    try:
-        return docx2txt.process(BytesIO(raw))
-    except Exception:
-        # fallback to utf‑8 text
-        try:
-            return raw.decode("utf‑8")
-        except:
-            return str(raw)
+openai.api_key = os.getenv("OPENAI_API_KEY", "")
 
-def load_job_description(jd_input):
+def parse_resume_file(uploaded_file) -> str:
     """
-    Return the job description text.
-    - If they uploaded a file, read & decode.
-    - Otherwise assume it’s a plain string.
+    Read a Streamlit-uploaded file (PDF or DOCX) and return plain text.
     """
-    # Streamlit’s text_area will give you a str, so just return it
-    if isinstance(jd_input, str):
-        return jd_input
-    # else it’s probably an UploadedFile
-    raw = jd_input.read()
-    try:
-        return raw.decode("utf‑8")
-    except:
-        # maybe it’s a .docx
-        return docx2txt.process(BytesIO(raw))
+    content_type = uploaded_file.type
+    if content_type == "application/pdf":
+        reader = PyPDF2.PdfReader(uploaded_file)
+        text = ""
+        for page in reader.pages:
+            page_text = page.extract_text()
+            if page_text:
+                text += page_text + "\n"
+        return text.strip()
+    elif content_type in (
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/msword"
+    ):
+        return docx2txt.process(uploaded_file)
+    else:
+        # fallback: try reading raw bytes
+        return uploaded_file.getvalue().decode("utf-8", errors="ignore")
+
+# Re-export extract_facts from your chain module
+# def extract_facts(resume_text: str) -> dict:
+#     ...
