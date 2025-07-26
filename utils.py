@@ -3,7 +3,7 @@ import json
 import docx2txt
 import PyPDF2
 import openai
-from chains.facts_extraction_chain import extract_facts
+from chains.facts_extraction_chain import extract_facts as chain_extract_facts
 
 # Initialize OpenAI API key from environment
 openai.api_key = os.getenv("OPENAI_API_KEY", "")
@@ -12,7 +12,6 @@ def parse_resume_file(uploaded_file) -> str:
     """
     Read a Streamlit-uploaded resume file (PDF, DOCX/DOC, or TXT) and return its plain text.
     """
-    # Determine content type or file extension fallback
     content_type = getattr(uploaded_file, "type", "")
     filename = getattr(uploaded_file, "name", "")
     lower_name = filename.lower()
@@ -22,19 +21,20 @@ def parse_resume_file(uploaded_file) -> str:
         reader = PyPDF2.PdfReader(uploaded_file)
         text_pages = []
         for page in reader.pages:
-            page_text = page.extract_text() or ""
-            text_pages.append(page_text)
+            text_pages.append(page.extract_text() or "")
         return "\n".join(text_pages).strip()
 
     # Handle DOCX/DOC files
-    if (content_type in (
+    if (
+        content_type in (
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             "application/msword"
-        ) or lower_name.endswith((".docx", ".doc"))):
+        ) or lower_name.endswith(('.docx', '.doc'))
+    ):
         return docx2txt.process(uploaded_file)
 
     # Handle plain text files
-    if content_type == "text/plain" or lower_name.endswith(".txt"):
+    if content_type == "text/plain" or lower_name.endswith('.txt'):
         try:
             raw = uploaded_file.getvalue()
             if isinstance(raw, (bytes, bytearray)):
@@ -43,7 +43,7 @@ def parse_resume_file(uploaded_file) -> str:
         except Exception:
             return ""
 
-    # Fallback: try to decode raw bytes from unknown types
+    # Fallback: decode raw bytes
     try:
         raw = uploaded_file.getvalue()
         if isinstance(raw, (bytes, bytearray)):
@@ -63,8 +63,7 @@ def extract_facts(resume_text: str) -> dict:
       - skills: list[str]
       - tools: list[str]
     """
-    facts = extract_facts(resume_text)
-    # Ensure valid structure
+    facts = chain_extract_facts(resume_text)
     return {
         "certification": facts.get("certification", ""),
         "coursework": facts.get("coursework", []),
