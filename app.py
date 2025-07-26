@@ -4,8 +4,8 @@ import io
 import sys, os
 from zipfile import ZipFile
 
-# Ensure the parent directory of this script (project root) is on the Python path
-sys.path.append(os.path.abspath(os.path.dirname(__file__)))
+# Ensure the project root (cwd) is on the Python path so 'chains' is discoverable
+sys.path.insert(0, os.getcwd())
 
 from chains.rag_chain import ResumeRAGChain
 
