@@ -16,7 +16,7 @@ cand_files = st.file_uploader(
 )
 
 # --- GENERATE ------------------------------------------------------------
-if st.button("Generate résumé"):
+if st.button("Generate resume"):
     if not job or not cand_files:
         st.error("Please provide the job posting **and** at least one candidate file.")
     else:
@@ -29,7 +29,7 @@ if st.button("Generate résumé"):
             facts = dredge(cand_txt, job)
 
         # 3) generate résumé + citations
-        with st.spinner("Drafting résumé …"):
+        with st.spinner("Drafting resume …"):
             output = generate_resume(facts, job)
 
         # 4) split safely
@@ -54,7 +54,7 @@ if st.button("Generate résumé"):
 if "resume_path" in st.session_state:
     with open(st.session_state["resume_path"], "rb") as f:
         st.download_button(
-            "Download résumé (.docx)",
+            "Download resume (.docx)",
             f,
             file_name="resume.docx",
             mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
