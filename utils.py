@@ -1,4 +1,5 @@
 # utils.py
+import os
 import PyPDF2, docx2txt
 
 def extract_text(file):
@@ -10,6 +11,9 @@ def extract_text(file):
 
 from docx import Document
 def write_resume_md(md: str, path="resume.docx"):
+    folder = os.path.dirname(path)
+    if folder and not os.path.exists(folder):
+        os.makedirs(folder, exist_ok=True)
     doc = Document()
     for line in md.splitlines():
         if line.startswith("# "):
