@@ -1,62 +1,37 @@
 import streamlit as st
-import json
-import io
-import sys, os
-from zipfile import ZipFile
+from utils import load_resume_text, load_job_description
+from chains.extraction_chain import extract_facts  # your existing extraction logic
+from chains.rewrite_chain import rewrite_resume      # new rewrite function
 
-# Ensure the project root (cwd) is on the Python path so 'chains' is discoverable
-sys.path.insert(0, os.getcwd())
+st.set_page_config(page_title="Auto Res Redraft", layout="wide")
+st.title("Auto Res Redraft")
 
-from chains.rag_chain import ResumeRAGChain
+# 1. Upload / paste resume
+st.sidebar.header("Upload your resume")
+resume_file = st.sidebar.file_uploader("Upload .docx or .txt", type=["docx", "txt"])
+resume_text = load_resume_text(resume_file) if resume_file else st.sidebar.text_area("Or paste resume here")
 
-# Initialize RAG chain
-chain = ResumeRAGChain()
+# 2. Paste job description
+st.sidebar.header("Target Job Description")
+job_desc = st.sidebar.text_area("Paste the JD here")
 
-st.title("AI Resume Redraft")
+# 3. Parameters
+st.sidebar.header("RAG & LLM Settings")
+k = st.sidebar.slider("Number of retrieved chunks (k)", 1, 10, 5)
+temperature = st.sidebar.slider("LLM temperature", 0.0, 1.0, 0.7)
 
-# User inputs
-uploaded_resume = st.file_uploader("Upload your current resume", type=["docx", "pdf"])
-job_desc = st.text_area("Paste the target job description here")
+# 4. Run extraction + rewrite
+if st.button("🔄 Rewrite Resume"):
+    with st.spinner("Extracting facts…"):
+        facts_json = extract_facts(resume_text)
+    st.markdown("**Extracted facts:**")
+    st.json(facts_json)
 
-# Parameters
-top_k = st.slider("Number of retrieved facts", 1, 10, 5)
-temperature = st.slider("Generation temperature", 0.0, 1.0, 0.7)
-
-if st.button("Rewrite"):    
-    if not uploaded_resume or not job_desc:
-        st.error("Please provide both a resume and a job description.")
-    else:
-        with st.spinner("Generating draft..."):
-            # Run chain: returns dict with 'facts_json', 'output_tokens', 'resume_docx'
-            result = chain.run(
-                resume_file=uploaded_resume,
-                job_description=job_desc,
-                top_k=top_k,
-                temperature=temperature
-            )
-
-        # Debug outputs for troubleshooting
-        st.subheader("Extracted Facts JSON (debug)")
-        st.json(result.get('facts_json', {}))
-
-        st.subheader("All Output Tokens (debug)")
-        tokens = result.get('output_tokens', [])
-        st.write(tokens)
-
-        # Package resume + metadata into ZIP
-        zip_buffer = io.BytesIO()
-        with ZipFile(zip_buffer, "w") as zip_file:
-            zip_file.writestr("redrafted_resume.docx", result['resume_docx'].getvalue())
-            metadata = {
-                'facts': result.get('facts_json'),
-                'tokens': result.get('output_tokens')
-            }
-            zip_file.writestr("metadata.json", json.dumps(metadata, indent=2))
-        zip_buffer.seek(0)
-
-        st.download_button(
-            label="Download Results",
-            data=zip_buffer,
-            file_name="results.zip",
-            mime="application/zip"
+    with st.spinner("Generating tailored bullets…"):
+        rewritten = rewrite_resume(
+            facts_json=facts_json,
+            resume=resume_text,
+            job_desc=job_desc
         )
+    st.markdown("**✔️ Rewritten Resume Bullets:**")
+    st.write(rewritten)
