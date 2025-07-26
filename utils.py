@@ -1,33 +1,62 @@
+import os
+import json
 import docx2txt
 import PyPDF2
 import openai
-import os
 from chains.facts_extraction_chain import extract_facts
 
+# Initialize OpenAI API key from environment
 openai.api_key = os.getenv("OPENAI_API_KEY", "")
 
 def parse_resume_file(uploaded_file) -> str:
     """
-    Read a Streamlit-uploaded file (PDF or DOCX) and return plain text.
+    Read a Streamlit-uploaded resume file (PDF or DOCX) and return its plain text.
     """
-    content_type = uploaded_file.type
-    if content_type == "application/pdf":
-        reader = PyPDF2.PdfReader(uploaded_file)
-        text = ""
-        for page in reader.pages:
-            page_text = page.extract_text()
-            if page_text:
-                text += page_text + "\n"
-        return text.strip()
-    elif content_type in (
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        "application/msword"
-    ):
-        return docx2txt.process(uploaded_file)
-    else:
-        # fallback: try reading raw bytes
-        return uploaded_file.getvalue().decode("utf-8", errors="ignore")
+    # Determine content type or file extension fallback
+    content_type = getattr(uploaded_file, "type", "")
+    filename = getattr(uploaded_file, "name", "")
 
-# Re-export extract_facts from your chain module
-# def extract_facts(resume_text: str) -> dict:
-#     ...
+    # Handle PDF files
+    if content_type == "application/pdf" or filename.lower().endswith(".pdf"):
+        reader = PyPDF2.PdfReader(uploaded_file)
+        text_pages = []
+        for page in reader.pages:
+            page_text = page.extract_text() or ""
+            text_pages.append(page_text)
+        return "\n".join(text_pages).strip()
+
+    # Handle DOCX/DOC files
+    if (content_type in (
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "application/msword"
+        ) or filename.lower().endswith((".docx", ".doc"))):
+        return docx2txt.process(uploaded_file)
+
+    # Fallback: try to decode raw bytes
+    try:
+        raw = uploaded_file.getvalue()
+        if isinstance(raw, bytes):
+            return raw.decode("utf-8", errors="ignore")
+        return str(raw)
+    except Exception:
+        return ""
+
+
+def extract_facts(resume_text: str) -> dict:
+    """
+    Extract structured facts from the resume text using the LLM-based extraction chain.
+
+    Returns a dictionary with keys:
+      - certification: str
+      - coursework: list[str]
+      - skills: list[str]
+      - tools: list[str]
+    """
+    facts = extract_facts(resume_text)
+    # Ensure valid structure
+    return {
+        "certification": facts.get("certification", ""),
+        "coursework": facts.get("coursework", []),
+        "skills": facts.get("skills", []),
+        "tools": facts.get("tools", []),
+    }
