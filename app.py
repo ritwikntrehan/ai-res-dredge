@@ -1,37 +1,72 @@
+import json
 import streamlit as st
-from utils import load_resume_text, load_job_description
-from chains.extraction_chain import extract_facts  # your existing extraction logic
-from chains.rewrite_chain import rewrite_resume      # new rewrite function
+from utils import parse_resume_file, extract_facts
+from chains.resume_rewrite_chain import get_resume_rewrite_chain
 
-st.set_page_config(page_title="Auto Res Redraft", layout="wide")
-st.title("Auto Res Redraft")
+st.set_page_config(page_title="AI RAG Resume Rewriter", layout="wide")
 
-# 1. Upload / paste resume
-st.sidebar.header("Upload your resume")
-resume_file = st.sidebar.file_uploader("Upload .docx or .txt", type=["docx", "txt"])
-resume_text = load_resume_text(resume_file) if resume_file else st.sidebar.text_area("Or paste resume here")
+def main():
+    st.title("AI‑Powered Resume Rewrite")
 
-# 2. Paste job description
-st.sidebar.header("Target Job Description")
-job_desc = st.sidebar.text_area("Paste the JD here")
+    # 1️⃣ Upload & parse resume
+    uploaded = st.file_uploader("Upload your resume (PDF or DOCX)", type=["pdf", "docx"])
+    if not uploaded:
+        st.info("Please upload a resume to start.")
+        return
+    resume_text = parse_resume_file(uploaded)
 
-# 3. Parameters
-st.sidebar.header("RAG & LLM Settings")
-k = st.sidebar.slider("Number of retrieved chunks (k)", 1, 10, 5)
-temperature = st.sidebar.slider("LLM temperature", 0.0, 1.0, 0.7)
+    # 2️⃣ Paste job description
+    job_desc = st.text_area("Paste Target Job Description", height=200)
+    if not job_desc:
+        st.info("Enter the job description to tailor your resume.")
+        return
 
-# 4. Run extraction + rewrite
-if st.button("🔄 Rewrite Resume"):
-    with st.spinner("Extracting facts…"):
-        facts_json = extract_facts(resume_text)
-    st.markdown("**Extracted facts:**")
-    st.json(facts_json)
+    # 3️⃣ Extract facts
+    facts_json = extract_facts(resume_text)
 
-    with st.spinner("Generating tailored bullets…"):
-        rewritten = rewrite_resume(
-            facts_json=facts_json,
-            resume=resume_text,
-            job_desc=job_desc
+    # 4️⃣ LLM parameters
+    col1, col2 = st.columns(2)
+    with col1:
+        temp = st.slider("Generation Temperature", 0.0, 1.0, 0.7, 0.05)
+    with col2:
+        max_toks = st.number_input("Max Output Tokens", min_value=100, max_value=2000, value=800)
+
+    # 5️⃣ Run rewrite
+    if st.button("Rewrite Resume"):
+        chain = get_resume_rewrite_chain(temperature=temp, max_tokens=max_toks)
+        with st.spinner("Rewriting…"):
+            result_obj = chain.invoke({
+                "resume": resume_text,
+                "job_description": job_desc,
+                "facts_json": facts_json
+            })
+
+        rewritten = result_obj.generations[0][0].text
+        usage = result_obj.llm_output["token_usage"]
+
+        # 6️⃣ Display
+        st.subheader("Rewritten Resume")
+        st.text_area("", value=rewritten, height=300)
+
+        # 7️⃣ Downloads
+        st.download_button(
+            "Download Prompt Tokens",
+            data=json.dumps({"prompt_tokens": usage["prompt_tokens"]}, indent=2),
+            file_name="input_tokens.json",
+            mime="application/json",
         )
-    st.markdown("**✔️ Rewritten Resume Bullets:**")
-    st.write(rewritten)
+        st.download_button(
+            "Download Total Tokens",
+            data=json.dumps({"total_tokens": usage["total_tokens"]}, indent=2),
+            file_name="total_tokens.json",
+            mime="application/json",
+        )
+        st.download_button(
+            "Download Output Tokens",
+            data=json.dumps({"completion_tokens": usage["completion_tokens"]}, indent=2),
+            file_name="output_tokens.json",
+            mime="application/json",
+        )
+
+if __name__ == "__main__":
+    main()
