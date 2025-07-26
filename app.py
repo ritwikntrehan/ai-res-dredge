@@ -19,7 +19,7 @@ if st.button("Generate Resume"):
         with st.spinner("Generating resume"):
             output = generate_resume(facts, job)
         resume_md, citations = output.split("# CITATIONS")
-        write_resume_md(resume_md, "/mnt/data/resume.docx")
+        write_resume_md(resume_md, "resume.docx")
         st.success("Download now")
-        st.download_button("Resume (.docx)", "/mnt/data/resume.docx")
+        st.download_button("Resume (.docx)", "resume.docx")
         st.download_button("Citations (.pdf)", data=citations, file_name="citations.pdf", mime="application/pdf")
