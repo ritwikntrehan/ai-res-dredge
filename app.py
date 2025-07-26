@@ -1,8 +1,11 @@
 import streamlit as st
 import json
 import io
+import sys, os
 from zipfile import ZipFile
 from chains.rag_chain import ResumeRAGChain
+
+sys.path.append(os.path.abspath("src"))
 
 # Initialize RAG chain
 chain = ResumeRAGChain()
